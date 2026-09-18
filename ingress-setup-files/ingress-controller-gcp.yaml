@@ -1,0 +1,671 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+  name: internal-ingress
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress
+  namespace: internal-ingress
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission
+  namespace: internal-ingress
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress
+  namespace: internal-ingress
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - internal-ingress-leader
+  resources:
+  - leases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission
+  namespace: internal-ingress
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - endpoints
+  - nodes
+  - pods
+  - secrets
+  - namespaces
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission
+rules:
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress
+  namespace: internal-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: internal-ingress
+subjects:
+- kind: ServiceAccount
+  name: internal-ingress
+  namespace: internal-ingress
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission
+  namespace: internal-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: internal-ingress-admission
+subjects:
+- kind: ServiceAccount
+  name: internal-ingress-admission
+  namespace: internal-ingress
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: internal-ingress
+subjects:
+- kind: ServiceAccount
+  name: internal-ingress
+  namespace: internal-ingress
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: internal-ingress-admission
+subjects:
+- kind: ServiceAccount
+  name: internal-ingress-admission
+  namespace: internal-ingress
+---
+apiVersion: v1
+data: null
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-controller
+  namespace: internal-ingress
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "dr-2-internal-ingress-80-neg-http"}}}'
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-controller
+  namespace: internal-ingress
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - appProtocol: http
+    name: http
+    port: 80
+    protocol: TCP
+    targetPort: http
+  - appProtocol: https
+    name: https
+    port: 443
+    protocol: TCP
+    targetPort: https
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-controller-admission
+  namespace: internal-ingress
+spec:
+  ports:
+  - appProtocol: https
+    name: https-webhook
+    port: 443
+    targetPort: webhook
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-controller
+  namespace: internal-ingress
+spec:
+  minReadySeconds: 0
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/instance: internal-ingress
+      app.kubernetes.io/name: internal-ingress
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: internal-ingress
+        app.kubernetes.io/name: internal-ingress
+        app.kubernetes.io/part-of: internal-ingress
+        app.kubernetes.io/version: 1.13.3
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - /nginx-ingress-controller
+        - --publish-service=$(POD_NAMESPACE)/internal-ingress-controller
+        - --election-id=internal-ingress-leader
+        - --controller-class=k8s.io/internal-nginx
+        - --ingress-class=internal-nginx
+        - --configmap=$(POD_NAMESPACE)/internal-ingress-controller
+        - --validating-webhook=:8443
+        - --validating-webhook-certificate=/usr/local/certificates/cert
+        - --validating-webhook-key=/usr/local/certificates/key
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LD_PRELOAD
+          value: /usr/local/lib/libmimalloc.so
+        image: registry.k8s.io/ingress-nginx/controller:v1.13.3@sha256:1b044f6dcac3afbb59e05d98463f1dec6f3d3fb99940bc12ca5d80270358e3bd
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /wait-shutdown
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: controller
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        - containerPort: 443
+          name: https
+          protocol: TCP
+        - containerPort: 8443
+          name: webhook
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 90Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+          runAsGroup: 82
+          runAsNonRoot: true
+          runAsUser: 101
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /usr/local/certificates/
+          name: webhook-cert
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: internal-ingress
+      terminationGracePeriodSeconds: 300
+      volumes:
+      - name: webhook-cert
+        secret:
+          secretName: internal-ingress-admission
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission-create
+  namespace: internal-ingress
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: internal-ingress
+        app.kubernetes.io/name: internal-ingress
+        app.kubernetes.io/part-of: internal-ingress
+        app.kubernetes.io/version: 1.13.3
+      name: internal-ingress-admission-create
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - create
+        - --host=internal-ingress-controller-admission,internal-ingress-controller-admission.$(POD_NAMESPACE).svc
+        - --namespace=$(POD_NAMESPACE)
+        - --secret-name=internal-ingress-admission
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.3@sha256:3d671cf20a35cd94efc5dcd484970779eb21e7938c98fbc3673693b8a117cf39
+        imagePullPolicy: IfNotPresent
+        name: create
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: internal-ingress-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission-patch
+  namespace: internal-ingress
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: internal-ingress
+        app.kubernetes.io/name: internal-ingress
+        app.kubernetes.io/part-of: internal-ingress
+        app.kubernetes.io/version: 1.13.3
+      name: internal-ingress-admission-patch
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - patch
+        - --webhook-name=internal-ingress-admission
+        - --namespace=$(POD_NAMESPACE)
+        - --patch-mutating=false
+        - --secret-name=internal-ingress-admission
+        - --patch-failure-policy=Fail
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.3@sha256:3d671cf20a35cd94efc5dcd484970779eb21e7938c98fbc3673693b8a117cf39
+        imagePullPolicy: IfNotPresent
+        name: patch
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: internal-ingress-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-nginx
+spec:
+  controller: k8s.io/internal-nginx
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: internal-ingress
+    app.kubernetes.io/name: internal-ingress
+    app.kubernetes.io/part-of: internal-ingress
+    app.kubernetes.io/version: 1.13.3
+  name: internal-ingress-admission
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: internal-ingress-controller-admission
+      namespace: internal-ingress
+      path: /networking/v1/ingresses
+      port: 443
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  name: validate.nginx.ingress.kubernetes.io
+  rules:
+  - apiGroups:
+    - networking.k8s.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - ingresses
+  sideEffects: None

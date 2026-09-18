@@ -1,0 +1,12 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: ingress-nginx-tgb
+  namespace: ingress-nginx
+spec:
+  serviceRef:
+    name: ingress-nginx-controller
+    port: 80
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-south-1:419611544464:targetgroup/ingress-nginx-tg/8c84135e64bda8a0
+  targetType: ip
+  vpcID: vpc-05fde4da728047e21

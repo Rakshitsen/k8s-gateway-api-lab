@@ -1,0 +1,19 @@
+# vault-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vault-ingress
+  namespace: vault
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: vault.rakops.in   # <-- replace with your actual domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vault
+                port:
+                  number: 8200   

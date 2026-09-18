@@ -1,0 +1,12 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: gateway-envoy-tgb
+  namespace: envoy-gateway-system
+spec:
+  serviceRef:
+    name: envoy-envoy-gateway-system-main-gateway-c3508b54 
+    port: 80
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-south-1:419611544464:targetgroup/envoy-proxy-tg/c2894cebb4941813
+  targetType: ip
+  vpcID: vpc-05fde4da728047e21
