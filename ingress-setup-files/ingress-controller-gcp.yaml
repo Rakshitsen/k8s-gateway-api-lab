@@ -427,8 +427,8 @@ spec:
         - /nginx-ingress-controller
         - --publish-service=$(POD_NAMESPACE)/ingress-nginx-controller
         - --election-id=ingress-nginx-leader
-        - --controller-class=k8s.io/internal-nginx
-        - --ingress-class=internal-nginx
+        - --controller-class=k8s.io/ingress-nginx
+        - --ingress-class=ingress-nginx
         - --configmap=$(POD_NAMESPACE)/ingress-nginx-controller
         - --validating-webhook=:8443
         - --validating-webhook-certificate=/usr/local/certificates/cert
@@ -632,9 +632,9 @@ metadata:
     app.kubernetes.io/name: ingress-nginx
     app.kubernetes.io/part-of: ingress-nginx
     app.kubernetes.io/version: 1.13.3
-  name: internal-nginx
+  name: ingress-nginx
 spec:
-  controller: k8s.io/internal-nginx
+  controller: k8s.io/ingress-nginx
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration

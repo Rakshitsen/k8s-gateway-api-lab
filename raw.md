@@ -95,3 +95,143 @@ which gke-gcloud-auth-plugin
 gcloud container clusters get-credentials <CLUSTER_NAME> --region <REGION> --project <PROJECT_ID>
 kubectl get nodes
 
+
+# Install & Configure Nginx Ingress Controller
+
+
+The Nginx Ingress Controller acts as a reverse proxy. It reads Kubernetes Ingress objects and configures Nginx routing rules accordingly. Traffic flows: External → ALB → Nginx Pod → Backend Services.
+
+2.1 Deploy Nginx Ingress Controller
+Create an ingress-controller-gcp.yaml manifest and apply it:
+
+kubectl apply -f ingress-controller-gcp.yaml
+
+Verify the controller pod is running:
+
+kubectl get pods -n ingress-nginx
+
+Expected output:
+
+NAME                                       READY   STATUS    RESTARTS   AGE
+ingress-nginx-controller-bd475d7b4-6jq2m   1/1     Running   0          69s
+
+
+
+create Load balancer
+
+gcloud compute addresses create rakops-loadbalancer-ip \
+    --global \
+    --ip-version IPV4
+
+
+create your certificate self managed and then create certificate mapping 
+
+
+create  global backend service which backend is neg which is being created when we create nginx ingress in which service we create these 
+cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "ingress-nginx-http-neg"}}}' this annotation on the service 
+
+gcloud compute health-checks create http rakops-health-check \
+    --region asia-south1 \
+    --port 10254 \
+    --request-path /healthz \
+    --proxy-header NONE \
+    --check-interval 30s \
+    --timeout 5s \
+    --healthy-threshold 2 \
+    --unhealthy-threshold 2 \
+    --no-enable-logging
+
+
+
+gcloud compute backend-services create rakops-backend-service \
+    --global \
+    --load-balancing-scheme EXTERNAL_MANAGED \
+    --protocol HTTP \
+    --health-checks rakops-health-check \
+    --timeout 30s \
+    --ip-address-selection-policy IPV4_ONLY \
+    --no-enable-cdn \
+    --no-enable-logging \
+    --security-policy default-security-policy-for-rakops-backend-service
+
+
+
+# Zone asia-south1-a
+gcloud compute backend-services add-backend rakops-backend-service \
+    --global \
+    --network-endpoint-group ingress-nginx-http-neg \
+    --network-endpoint-group-zone asia-south1-a \
+    --balancing-mode RATE \
+    --max-rate-per-endpoint 100 \
+    --capacity-scaler 1.0
+
+# Zone asia-south1-b
+gcloud compute backend-services add-backend rakops-backend-service \
+    --global \
+    --network-endpoint-group ingress-nginx-http-neg \
+    --network-endpoint-group-zone asia-south1-b \
+    --balancing-mode RATE \
+    --max-rate-per-endpoint 100 \
+    --capacity-scaler 1.0
+
+# Zone asia-south1-c
+gcloud compute backend-services add-backend rakops-backend-service \
+    --global \
+    --network-endpoint-group ingress-nginx-http-neg \
+    --network-endpoint-group-zone asia-south1-c \
+    --balancing-mode RATE \
+    --max-rate-per-endpoint 100 \
+    --capacity-scaler 1.0
+
+allow load balancer to do health checks
+
+gcloud compute firewall-rules create allow-ingress-from-loadbalancer \
+    --network=rakops-vpc-dev\
+    --action=ALLOW \
+    --direction=INGRESS \
+    --source-ranges=35.191.0.0/16,130.211.0.0/22 \
+    --rules=tcp:80,tcp:10254 \
+    --target-tags=gke-rakops-cluster-07c909d6-node  # network tag which is present in worker nodes 
+
+
+
+
+
+Step 7: Deploy HashiCorp Vault (Demo App)
+Deploy Vault as a sample stateful application to test the full stack.
+
+Add HashiCorp Helm Repository
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm repo update
+
+Search available versions:
+
+helm search repo hashicorp/vault -l
+
+Create Namespace & Install
+kubectl create ns vault
+
+helm install vault hashicorp/vault --namespace vault --version 0.34.1
+
+Create ingress object
+kubectl apply -f vault-ingress.yaml
+### Initialize Vault
+
+Open a shell in the Vault pod:
+
+```bash
+kubectl exec -it vault-0 -n vault -- sh
+
+Inside the pod, run:
+
+vault operator init
+vault operator unseal
+
+Critical: Save the unseal keys and root token securely. Do NOT commit to version control or Slack. Store in a secure password manager.
+
+Step 8: Deploy Jenkins (Demo App - optional)
+Create Namespace & Install
+kubectl create ns jenkins
+helm install my-jenkins jenkins/jenkins  -n jenkins
+
+kubectl apply -f jenkins-ingress.yaml
