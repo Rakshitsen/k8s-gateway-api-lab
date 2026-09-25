@@ -235,3 +235,7 @@ kubectl create ns jenkins
 helm install my-jenkins jenkins/jenkins  -n jenkins
 
 kubectl apply -f jenkins-ingress.yaml
+
+
+
+{note:-  this is good command to check why ns is being stuck state kubectl api-resources --verbs=list --namespaced -o name | xargs -n 1 kubectl get --show-kind --ignore-not-found -n ingress-nginx}

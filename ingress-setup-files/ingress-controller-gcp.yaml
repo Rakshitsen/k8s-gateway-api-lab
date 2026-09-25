@@ -632,7 +632,7 @@ metadata:
     app.kubernetes.io/name: ingress-nginx
     app.kubernetes.io/part-of: ingress-nginx
     app.kubernetes.io/version: 1.13.3
-  name: ingress-nginx
+  name: nginx
 spec:
   controller: k8s.io/ingress-nginx
 ---
