@@ -191,7 +191,7 @@ gcloud compute firewall-rules create allow-ingress-from-loadbalancer \
     --direction=INGRESS \
     --source-ranges=35.191.0.0/16,130.211.0.0/22 \
     --rules=tcp:80,tcp:10254 \
-    --target-tags=gke-rakops-cluster-07c909d6-node  # network tag which is present in worker nodes 
+    --target-tags=gke-rakops-cluster-07c909d6-node  # network tag which is present on worker nodes 
 
 
 
@@ -239,3 +239,14 @@ kubectl apply -f jenkins-ingress.yaml
 
 
 {note:-  this is good command to check why ns is being stuck state kubectl api-resources --verbs=list --namespaced -o name | xargs -n 1 kubectl get --show-kind --ignore-not-found -n ingress-nginx}
+
+
+
+
+update dns records with load balancer ip
+
+do mapping 
+jenkins.rakops.in 
+vault.rakops.in 
+with rakops-certificate-mapping
+
