@@ -751,9 +751,472 @@ dig vault.rakops.in
 gcloud compute addresses describe rakops-loadbalancer-ip --global --format='value(address)'
 ```
 
+
+# GCP GKE Ingress Migration: Nginx Controller → Envoy Gateway API
+
+## Migrating to Modern Standards-Based Gateway API
+
 ---
+
+## Overview
+
+This guide walks through migrating from the traditional **Nginx Ingress Controller** to **Envoy Gateway**—a modern, standards-based alternative implementing the Kubernetes Gateway API.
+
+### Why Migrate to Envoy Gateway?
+
+| Feature | Nginx Ingress | Envoy Gateway |
+|---------|---------------|---------------|
+| API Standard | Legacy Ingress API | Gateway API (k8s.io/v1beta1) |
+| Routing Semantics | Basic (host, path) | Advanced (HTTPRoute, matching conditions) |
+| Traffic Control | Limited | Traffic splitting, weights, retries |
+| Request Modification | Via annotations | Native HTTP filters |
+| Observability | Basic logs | Envoy metrics, tracing, debugging |
+| Extensibility | Plugins/annotations | Gateway filters, security policies |
+| Industry Adoption | Legacy (deprecating) | Future standard (CNCF) |
+
+### By the End of This Guide
+
+- Envoy Gateway control plane running in your cluster
+- Gateway data plane pods managing traffic routing
+- Network Endpoint Groups (NEG) for dynamic pod discovery
+- HTTPRoutes configured for applications (Vault, Jenkins)
+- Load balancer pointing to Envoy backend service
+- DNS resolving to applications via Envoy Gateway
+
+**Migration Path:** Keep Nginx running during migration → Test Envoy routes → Switch load balancer → Remove Nginx
+
+---
+
+## Prerequisites
+
+Before starting, ensure you have completed:
+
+- ✅ Nginx Ingress Controller running in `ingress-nginx` namespace
+- ✅ Google Cloud LB pointing to Nginx NEG
+- ✅ Applications deployed with Nginx Ingress objects
+- ✅ `kubectl` and `gcloud` CLI access on jump host
+- ✅ Helm 3+ installed
+
+**Important:** This guide does **NOT** remove Nginx. You can run both simultaneously during testing.
+
+---
+
+## Step 1: Install Envoy Gateway Control Plane
+
+Envoy Gateway consists of two parts:
+1. **Control Plane** — Watches Gateway/HTTPRoute resources, configures Envoy proxies
+2. **Data Plane** — Actual Envoy proxy pods handling traffic routing
+
+### 1.1 Install Envoy Gateway Controller
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.9.1   -n envoy-gateway-system   --create-namespace
+```
+
+**Note:** Replace version `1.9.1` with the latest stable version from the [Envoy Gateway releases](https://github.com/envoyproxy/gateway/releases).
+
+### 1.2 Verify Control Plane
+
+```bash
+kubectl get pods -n envoy-gateway-system
+```
+
+Expected output:
+
+```
+NAME                                 READY   STATUS    RESTARTS   AGE
+envoy-gateway-5f8b9c7d9d-abc2x       1/1     Running   0          2m
+```
+
+The control plane pods are now running and watching for Gateway/HTTPRoute resources.
+
+---
+
+## Step 2: Configure EnvoyProxy Custom Resource
+
+The **EnvoyProxy** resource defines how Envoy proxies behave—pod replicas, resource limits, network configuration, etc. Importantly, it adds the annotation to create a **Network Endpoint Group (NEG)** so Google Cloud LB can discover Envoy pods.
+
+### 2.1 Create EnvoyProxy Manifest
+
+Create a file named `envoy-proxy-gcp.yaml`:
+
+  
+  # Pod annotations for GCP integration
+  podAnnotations:
+    cloud.google.com/neg: '{"exposed_ports": {"10080":{"name": "gateway-envoy-http-neg"}}}'
+  
+```
+
+### 2.2 Apply EnvoyProxy Configuration
+
+```bash
+kubectl apply -f envoy-proxy-gcp.yaml
+```
+
+### Key Configuration Points
+
+| Parameter | Purpose |
+|-----------|---------|
+| `cloud.google.com/neg` annotation | **Critical** — Creates NEG for load balancer discovery |
+
+
+
+
+---
+
+## Step 3: Create GatewayClass & Gateway Resources
+
+**GatewayClass** tells Kubernetes which controller manages Gateway objects (similar to IngressClass for Ingress). **Gateway** provisions actual Envoy proxy pods.
+
+### 3.1 Create GatewayClass Manifest
+
+
+
+Apply it:
+
+```bash
+kubectl apply -f gateway-class.yaml
+```
+
+### 3.2 Create Gateway Manifest (Data Plane)
+
+
+Apply it:
+
+```bash
+kubectl apply -f gateway.yaml
+```
+
+### 3.3 Verify Data Plane Pods Created
+
+The Gateway controller automatically creates Envoy proxy pods:
+
+```bash
+kubectl get pods -n envoy-gateway-system
+```
+
+Expected output:
+
+```
+NAME                                                            READY   STATUS    RESTARTS   AGE
+envoy-envoy-gateway-system-main-gateway-c3508b54-86b95d79d...   2/2     Running   0          30s
+envoy-gateway-6fbfccc98d-q86rd                                  1/1     Running   0          5m
+```
+
+The pod name format: `envoy-{namespace}-{gateway-name}-{hash}`.
+
+### 3.4 Verify Data Plane Service
+
+```bash
+kubectl get svc -n envoy-gateway-system
+```
+
+Expected output:
+
+```
+NAME                                         TYPE        CLUSTER-IP       PORT(S)      AGE
+envoy-envoy-gateway-system-main-gateway      ClusterIP   10.100.50.XX     10080/TCP    15s
+envoy-gateway                                ClusterIP   10.100.50.YY     9001/TCP     5m
+```
+
+The data plane service is **ClusterIP** (internal) because Google Cloud LB discovers pods via NEG, not via service.
+
+### 3.5 Verify NEG Created in GCP
+
+The annotation in EnvoyProxy should have automatically created Network Endpoint Groups. Verify in GCP Console:
+
+```bash
+gcloud compute network-endpoint-groups list --region=asia-south1
+```
+
+Expected output:
+
+```
+NAME                        REGION         NETWORK_ENDPOINT_TYPE   SIZE
+gateway-envoy-http-neg      asia-south1    GCE_VM_IP_PORT          1
+ingress-nginx-http-neg      asia-south1    GCE_VM_IP_PORT          1
+```
+
+---
+
+## Step 4: Create HTTPRoutes for Applications
+
+**HTTPRoutes** replace the traditional Ingress objects. They provide fine-grained traffic routing with better semantics (matching rules, weights, request modification).
+
+### 4.1 Create Vault HTTPRoute
+
+Apply it:
+
+```bash
+kubectl apply -f vault-httproute.yaml
+```
+
+### 4.2 Create Jenkins HTTPRoute
+
+
+Apply it:
+
+```bash
+kubectl apply -f jenkins-httproute.yaml
+```
+
+### 4.3 Verify HTTPRoutes are Bound
+
+```bash
+kubectl get httproute -A
+```
+
+Expected output:
+
+```
+NAMESPACE   NAME             HOSTNAMES              PARENTS   AGE
+vault       vault-route      [vault.rakops.in]      1         10s
+jenkins     jenkins-route    [jenkins.rakops.in]    1         5s
+```
+
+Check route status:
+
+```bash
+kubectl describe httproute vault-route -n vault
+```
+
+Should show `Accepted: True` in the status.
+
+---
+
+## Step 5: Update Google Cloud Load Balancer Configuration
+
+Now reconfigure the load balancer to point to the **Envoy backend service** instead of Nginx. You'll keep the same load balancer infrastructure (forwarding rules, IP, SSL) but swap the backend.
+
+### 5.1 Update Firewall Rules
+
+Allow traffic from Google Cloud LB health checks to Envoy pods on ports 10080 (traffic) and 19003 (health):
+
+```bash
+gcloud compute firewall-rules create allow-envoy-ingress-from-lb \
+    --network=rakops-vpc-dev \
+    --action=ALLOW \
+    --direction=INGRESS \
+    --source-ranges=35.191.0.0/16,130.211.0.0/22 \
+    --rules=tcp:10080,tcp:19003 \
+    --target-tags=gke-rakops-cluster-fc8dabb5-node \
+    --description="Allow GCP LB and health checks to Envoy on 10080 and 19003" \
+    --project=YOUR_PROJECT_ID
+```
+
+**Note:** Replace `gke-rakops-cluster-fc8dabb5-node` with your actual GKE node network tag. Find it with:
+
+```bash
+gcloud compute instances list --filter="zone:asia-south1-*" --format="value(tags.items[0])"
+```
+
+### 5.2 Create Envoy Health Check
+
+```bash
+gcloud compute health-checks create http envoy-proxy-health-check \
+    --global \
+    --port=19003 \
+    --request-path=/ready \
+    --check-interval=30s \
+    --timeout=5s \
+    --healthy-threshold=2 \
+    --unhealthy-threshold=2 \
+    --description="Health check for Envoy proxy on admin port 19003" \
+    --project=YOUR_PROJECT_ID
+```
+
+**Why port 19003?** Envoy admin interface runs on :19003 (configurable but standard). The `/ready` endpoint returns 200 when Envoy is ready.
+
+### 5.3 Create New Backend Service for Envoy
+
+```bash
+gcloud compute backend-services create rakops-backend-envoy-service \
+    --global \
+    --load-balancing-scheme=EXTERNAL_MANAGED \
+    --protocol=HTTP \
+    --health-checks=envoy-proxy-health-check \
+    --timeout=30s \
+    --ip-address-selection-policy=IPV4_ONLY \
+    --no-enable-cdn \
+    --no-enable-logging \
+    --project=YOUR_PROJECT_ID
+```
+
+### 5.4 Add NEG Backends Across All Zones
+
+Add the Envoy NEG to the backend service for each zone:
+
+```bash
+# Zone asia-south1-a
+gcloud compute backend-services add-backend rakops-backend-envoy-service \
+    --global \
+    --network-endpoint-group=gateway-envoy-http-neg \
+    --network-endpoint-group-zone=asia-south1-a \
+    --balancing-mode=RATE \
+    --max-rate-per-endpoint=100 \
+    --capacity-scaler=1.0 \
+    --project=YOUR_PROJECT_ID
+
+# Zone asia-south1-b
+gcloud compute backend-services add-backend rakops-backend-envoy-service \
+    --global \
+    --network-endpoint-group=gateway-envoy-http-neg \
+    --network-endpoint-group-zone=asia-south1-b \
+    --balancing-mode=RATE \
+    --max-rate-per-endpoint=100 \
+    --capacity-scaler=1.0 \
+    --project=YOUR_PROJECT_ID
+
+# Zone asia-south1-c
+gcloud compute backend-services add-backend rakops-backend-envoy-service \
+    --global \
+    --network-endpoint-group=gateway-envoy-http-neg \
+    --network-endpoint-group-zone=asia-south1-c \
+    --balancing-mode=RATE \
+    --max-rate-per-endpoint=100 \
+    --capacity-scaler=1.0 \
+    --project=YOUR_PROJECT_ID
+```
+
+### 5.5 Update URL Map to Use Envoy Backend
+
+If you created a URL map during Nginx setup, update it to point to the Envoy backend:
+
+```bash
+# Update the default service
+gcloud compute url-maps update rakops-url-map \
+    --default-service=rakops-backend-envoy-service \
+    --project=YOUR_PROJECT_ID
+```
+
+### 5.6 Verify Envoy Backend Health
+
+```bash
+gcloud compute backend-services get-health rakops-backend-envoy-service --global --project=YOUR_PROJECT_ID
+```
+
+Expected output (NEGs should be HEALTHY):
+
+```
+---
+backend: https://www.googleapis.com/compute/v1/projects/YOUR_PROJECT_ID/global/networkEndpointGroups/gateway-envoy-http-neg/zones/asia-south1-a
+status:
+  healthStatus:
+  - healthState: HEALTHY
+    instance: https://www.googleapis.com/compute/v1/projects/YOUR_PROJECT_ID/zones/asia-south1-a/instances/gke-rakops-cluster-default-pool-xxx-yyy
+    ipAddress: 10.0.1.5
+    port: 10080
+```
+
+If backends show `UNHEALTHY`:
+- Verify Envoy pod is running: `kubectl get pods -n envoy-gateway-system`
+- Check pod logs: `kubectl logs -n envoy-gateway-system -l app.kubernetes.io/name=envoy`
+- Verify firewall rule is applied to correct node tags
+
+---
+
+## Step 6: Test Envoy Routes
+
+Once the backend is healthy, test traffic routing.
+
+### 6.1 Test Vault
+
+```bash
+curl -I https://vault.rakops.in
+```
+
+Expected output:
+
+```
+HTTP/2 200
+```
+
+If you get 502 Bad Gateway:
+- Wait for backend to become HEALTHY (takes 1-2 min)
+- Check HTTPRoute is `Accepted`: `kubectl describe httproute vault-route -n vault`
+- Check service exists: `kubectl get svc -n vault`
+
+### 6.2 Test Jenkins
+
+```bash
+curl -I https://jenkins.rakops.in
+```
+
+Expected output:
+
+```
+HTTP/2 200
+```
+
+### 6.3 Verify Traffic is Routing Through Envoy
+
+Check Envoy pod access logs:
+
+```bash
+kubectl logs -n envoy-gateway-system -l app.kubernetes.io/name=envoy --tail=20
+```
+
+Should show HTTP requests from the load balancer.
+
+---
+
+## Step 7: Migrate Traffic to Envoy
+
+Once Envoy is working and routes are verified, switch the load balancer from Nginx to Envoy. **You can keep Nginx running as a fallback.**
+
+### 7.1 Switch Load Balancer (Already Done in Step 5.5)
+
+If you updated the URL map, traffic is already flowing through Envoy. The old Nginx backend service (`rakops-backend-service`) is no longer receiving traffic.
+
+### 7.2 Optional: Remove Nginx from Load Balancer
+
+If you want to confirm Nginx is not being used:
+
+```bash
+gcloud compute backend-services get-health rakops-backend-service --global --project=YOUR_PROJECT_ID
+```
+
+If backends show `UNHEALTHY` or the backend service is not referenced by any URL map, Nginx is not receiving traffic.
+
+### 7.3 Keep Nginx Running (Recommended)
+
+For 1-2 weeks, keep Nginx running as a fallback:
+- Quickly rollback if Envoy has issues
+- Test both stacks simultaneously
+- Monitor Envoy metrics and logs
+
+After confidence period, you can delete Nginx Ingress Controller:
+
+```bash
+helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete ns ingress-nginx
+```
+
+---
+
+## Verification Checklist
+
+Before declaring migration complete, verify:
+
+- [ ] Envoy control plane pods running: `kubectl get pods -n envoy-gateway-system`
+- [ ] Envoy data plane pods running: `kubectl get pods -n envoy-gateway-system -l app.kubernetes.io/name=envoy`
+- [ ] Gateway resource created: `kubectl get gateway -A`
+- [ ] HTTPRoutes created and accepted: `kubectl get httproute -A`
+- [ ] NEG exists: `gcloud compute network-endpoint-groups list --region=asia-south1`
+- [ ] Backend service healthy: `gcloud compute backend-services get-health rakops-backend-envoy-service --global`
+- [ ] Vault accessible: `curl -I https://vault.rakops.in` → HTTP 200
+- [ ] Jenkins accessible: `curl -I https://jenkins.rakops.in` → HTTP 200
+- [ ] Load balancer forwarding traffic to Envoy: Check LB logs in GCP Console
+
+---
+
 ## References
 
+- [Envoy Gateway Official Documentation](https://gateway.envoyproxy.io/)
+- [Kubernetes Gateway API](https://gateway.api.k8s.io/)
+- [GCP Network Endpoint Groups](https://cloud.google.com/kubernetes-engine/docs/how-to/network-endpoint-groups)
+- [Envoy Proxy Documentation](https://www.envoyproxy.io/docs/envoy/latest)
+- [HTTPRoute API Reference](https://gateway.networking.k8s.io/v1beta1/api-types/)
 - [GKE Official Documentation](https://cloud.google.com/kubernetes-engine/docs)
 - [VPC Creation Guide](https://github.com/Rakshitsen/kubernetes-ha-gcp/blob/main/guide/01-create-vpc.md)
 - [Nginx Ingress Controller Helm Chart](https://kubernetes.github.io/ingress-nginx/)
