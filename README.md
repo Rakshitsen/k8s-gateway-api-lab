@@ -2,6 +2,69 @@
 
 Hands-on lab for migrating Kubernetes ingress from classic Ingress controllers (Nginx/ALB) to the **Gateway API** (Envoy) on both **AWS EKS** and **GCP GKE**. Includes full setup guides, working manifests, and a side-by-side Ingress vs Gateway API comparison for the same two apps (Vault, Jenkins).
 
+
+## Architecture: Ingress vs Gateway API
+
+### AWS EKS
+
+```mermaid
+flowchart LR
+    Client([Client])
+
+    subgraph Ingress Path
+        direction LR
+        ALB[AWS ALB]
+        NgxIC[Nginx Ingress Controller]
+        SvcA[Service]
+        PodA[Pod]
+        ALB --> NgxIC --> SvcA --> PodA
+    end
+
+    subgraph Gateway API Path
+        direction LR
+        ALB2[AWS ALB / Target Group]
+        EnvoyA[Envoy Gateway]
+        RouteA[HTTPRoute]
+        SvcA2[Service]
+        PodA2[Pod]
+        ALB2 --> EnvoyA --> RouteA --> SvcA2 --> PodA2
+    end
+
+    Client --> ALB
+    Client --> ALB2
+```
+
+### GCP GKE
+
+```mermaid
+flowchart LR
+    Client([Client])
+
+    subgraph Ingress Path
+        direction LR
+        GLB[Google Cloud LB]
+        NgxIC2[Nginx Ingress Controller]
+        SvcB[Service]
+        PodB[Pod]
+        GLB --> NgxIC2 --> SvcB --> PodB
+    end
+
+    subgraph Gateway API Path
+        direction LR
+        GLB2[Google Cloud LB / NEG]
+        EnvoyB[Envoy Gateway]
+        RouteB[HTTPRoute]
+        SvcB2[Service]
+        PodB2[Pod]
+        GLB2 --> EnvoyB --> RouteB --> SvcB2 --> PodB2
+    end
+
+    Client --> GLB
+    Client --> GLB2
+```
+
+Both paths run side by side for Vault and Jenkins in this lab, so you can compare routing, health checks, and failure behavior directly instead of taking it on faith.
+
 ## What's in here
 
 | Path | Purpose |
@@ -40,6 +103,7 @@ This repo documents doing that migration for real, on two clouds, with two real 
 - **Vault** and **Jenkins** deployed behind both an Ingress controller and a Gateway API stack (Envoy), so you can compare configuration and behavior directly.
 - **AWS path:** EKS → Nginx Ingress + ALB → migrate to Envoy Gateway with target group bindings.
 - **GCP path:** Private GKE → Nginx Ingress + external LB → migrate to Envoy Gateway with NEGs.
+
 
 ## Quick start
 
