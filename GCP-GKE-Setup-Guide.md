@@ -241,6 +241,16 @@ Before creating the jump host, ensure:
      --rules=tcp:22 \
      --target-tags=iap-ssh
    ```
+4. Allow load balancer to do health checks
+    ```bash
+    gcloud compute firewall-rules create allow-ingress-from-loadbalancer \
+        --network=rakops-vpc-dev\
+        --action=ALLOW \
+        --direction=INGRESS \
+        --source-ranges=35.191.0.0/16,130.211.0.0/22 \
+        --rules=tcp:80,tcp:10254 \
+        --target-tags=gke-rakops-cluster-07c909d6-node  # network tag which is present on worker nodes 
+    ```
 
 Then add the tag to the jump host:
    ```bash
@@ -396,6 +406,7 @@ The load balancer needs to verify Nginx pods are healthy. It checks the metrics 
 
 ```bash
 gcloud compute health-checks create http rakops-health-check \
+    --global \
     --region=asia-south1 \
     --port=10254 \
     --request-path=/healthz \

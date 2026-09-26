@@ -1,0 +1,15 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: main-gateway-config
+  namespace: envoy-gateway-system
+
+spec:
+  provider:
+    type: Kubernetes
+
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+        annotations:
+          cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "gateway-envoy-http-neg"}}}'
